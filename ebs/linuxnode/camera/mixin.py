@@ -2,18 +2,19 @@
 
 import os
 import yaml
-from appdirs import user_config_dir
+from appdirs import user_data_dir, user_config_dir
 
 from ebs.linuxnode.core.config import ElementSpec
 from ebs.linuxnode.core.config import ItemSpec
 from ebs.linuxnode.core.basenode import BaseIoTNode
+from ebs.linuxnode.sysinfo.mixin import SysinfoMixin
 
 from .info import CameraInfo
 from .multicam import MultiCameraManager
 from .utils import merge_dicts
 
 
-class CameraMixin(BaseIoTNode):
+class CameraMixin(SysinfoMixin, BaseIoTNode):
     def __init__(self, *args, **kwargs):
         super(CameraMixin, self).__init__(*args, **kwargs)
         self._camera_manager = None
@@ -22,12 +23,23 @@ class CameraMixin(BaseIoTNode):
     def install(self):
         super(CameraMixin, self).install()
         _elements = {
+            'camera_preview_lowres': ElementSpec('camera_preview', "lowres", ItemSpec(bool, fallback=True)),
             'camera_aliases': ElementSpec('camera', 'aliases', ItemSpec(fallback='')),
             'camera_backend': ElementSpec('camera', 'backend', ItemSpec(fallback='opencv')),
             'camera_inherit_alias': ElementSpec('camera', 'inherit_alias', ItemSpec(bool, fallback=True)),
+            'camera_publish_api': ElementSpec('camera', 'publish_api', ItemSpec(bool, fallback=False)),
         }
         for name, spec in _elements.items():
             self.config.register_element(name, spec)
+
+    @property
+    def camera_captures_path(self):
+        if self.config.camera_publish_api:
+            target = os.path.join(self.tempdir, 'captures')
+        else:
+            target = os.path.join(user_data_dir(self.appname), 'captures')
+        os.makedirs(target, exist_ok=True)
+        return target
 
     @property
     def camera_aliases(self):
@@ -43,7 +55,8 @@ class CameraMixin(BaseIoTNode):
 
     @property
     def cameras_config_file(self):
-        return os.path.join(user_config_dir(self.appname), 'cameras.yml')
+        rv = os.path.join(user_config_dir(self.appname), 'cameras.yml')
+        return rv
 
     _cameras_config_default = {
                 'default': {
@@ -55,7 +68,7 @@ class CameraMixin(BaseIoTNode):
                         'resolution': 'max',
                         'fps': 'min',
                         'buffer_size': 'min',
-                        'delay': 1
+                        'delay': 3
                     },
                     "crop": {
                         'type': "crop",
@@ -103,4 +116,5 @@ class CameraMixin(BaseIoTNode):
         self._camera_manager = MultiCameraManager(self, backend=self.config.camera_backend)
 
     def stop(self):
+        self._camera_manager.exit_wait()
         super().stop()

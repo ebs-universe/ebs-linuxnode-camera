@@ -12,12 +12,13 @@ from twisted.internet import threads
 from twisted.internet.defer import inlineCallbacks
 
 from .base import CameraControllerBase
+from .pipeline import BlockingPipelineExecutor
 from ..utils import dict_to_ns
 
 
-class CameraControllerOpenCV(CameraControllerBase):
-    def __init__(self, alias, cam_spec: dict, config):
-        super().__init__(alias, cam_spec, config)
+class CameraControllerOpenCV(BlockingPipelineExecutor, CameraControllerBase):
+    def __init__(self, alias, cam_spec: dict, config, **kwargs):
+        super().__init__(alias, cam_spec, config, **kwargs)
         self._lock = threading.Lock()
 
         # Preview state
@@ -25,8 +26,28 @@ class CameraControllerOpenCV(CameraControllerBase):
         self._preview_cap = None
         self._last_preview_frame = None
 
+        self._frame_cond = threading.Condition()
         self._preview_running = threading.Event()
-        self._frame_cond = threading.Condition()  # notify new frame
+        self._errored = threading.Event()
+
+    def exit_wait(self):
+        if not self._preview_running.is_set():
+            return
+        self._preview_running.clear()
+        if self._preview_thread:
+            self._preview_thread.join(timeout=1.0)
+            self._preview_thread = None
+
+    @property
+    def preview_running(self):
+        return self._preview_running.is_set()
+
+    @property
+    def errored(self):
+        return self._errored.is_set()
+
+    def clear_error(self):
+        self._errored.clear()
 
     def _preview_loop(self, dev, w, h):
         cap = cv2.VideoCapture(dev)
@@ -48,6 +69,7 @@ class CameraControllerOpenCV(CameraControllerBase):
         while self._preview_running.is_set():
             ret, frame = cap.read()
             if not ret:
+                self._errored.set()
                 continue  # skip bad frame
             with self._frame_cond:
                 self._last_preview_frame = frame
@@ -62,9 +84,14 @@ class CameraControllerOpenCV(CameraControllerBase):
         Start preview in a dedicated thread.
         Returns a Deferred that fires when the thread is running.
         """
+        super().preview_start()
         def _start():
             if self._preview_running.is_set():
                 return
+            if self._errored.is_set():
+                self.log.warn(f"Cam {self.alias} : Errored. Not starting preview.")
+                return
+
             if not self._lock.acquire(blocking=False):
                 raise RuntimeError("Camera is already in use")
 
@@ -86,6 +113,7 @@ class CameraControllerOpenCV(CameraControllerBase):
         """
         Stop preview and wait for thread to exit.
         """
+        super().preview_stop()
         def _stop():
             if not self._preview_running.is_set():
                 return
@@ -97,9 +125,14 @@ class CameraControllerOpenCV(CameraControllerBase):
         return threads.deferToThread(_stop)
 
     def get_preview_frame(self, timeout=1.0):
+        super().get_preview_frame()
         def _get():
             if not self._preview_running.is_set():
                 raise RuntimeError("Preview is not running")
+
+            if self._errored.is_set():
+                self.preview_stop()
+                self.log.error("Preview errored out")
 
             end_time = time.time() + timeout
             with self._frame_cond:
@@ -116,11 +149,49 @@ class CameraControllerOpenCV(CameraControllerBase):
                 if self._last_preview_frame is None:
                     raise RuntimeError("Timed out waiting for preview frame")
 
-                return self._last_preview_frame
+                frame = self._last_preview_frame.copy()
+
+                if self.preview_overlay_crop:
+                    frame = self._draw_crop(frame)
+
+                if self.preview_apply_crop:
+                    frame = self._apply_crop(frame)
+
+                return frame
         return threads.deferToThread(_get)
+
+    def _draw_crop(self, frame):
+        try:
+            x1, x2, y1, y2 = self.effective_crop_geometry('still')
+            if (x1, y1, x2, y2) == (0, 0, 1, 1):
+                return frame
+
+            h, w = frame.shape[:2]
+            px1, px2 = int(x1 * w), int(x2 * w)
+            py1, py2 = int(y1 * h), int(y2 * h)
+            cv2.rectangle(frame, (px1, py1), (px2, py2), (0, 255, 255), 1)
+            return frame
+
+        except Exception as e:
+            self.log.warn(f"Failed to draw crop overlay: {e}")
+
+    def _apply_crop(self, frame):
+        x1, x2, y1, y2 = self.preview_crop_geometry('still')
+        if (x1, y1, x2, y2) == (0, 0, 1, 1):
+            return
+
+        h, w = frame.shape[:2]
+        px1 = int(x1 * w)
+        px2 = int(x2 * w)
+        py1 = int(y1 * h)
+        py2 = int(y2 * h)
+
+        print(h, w, px1, px2, py1, py2)
+        return frame[py1:py2, px1:px2]
 
     @inlineCallbacks
     def capture_still(self, output_dir: str = None, on_progress=None):
+        super().capture_still()
         """
         Capture stills safely: only one capture at a time per camera.
         """
@@ -238,11 +309,12 @@ class CameraControllerOpenCV(CameraControllerBase):
                 del sp.type
             return sp
 
-        context = self._execute_pipeline(
+        context = self._execute_blocking_pipeline(
             cfg=cfg,
             pipeline=pipeline,
             initial_context={'output_dir': output_dir},
             report_progress=report_progress,
+            report_key=self.alias,
             special_steps={'connect': _special_connect},
         )
 

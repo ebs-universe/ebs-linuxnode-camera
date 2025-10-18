@@ -7,11 +7,10 @@ from twisted.internet.defer import inlineCallbacks
 from ebs.linuxnode.core import config
 from ebs.linuxnode.core.basenode import BaseIoTNode
 
-from ebs.linuxnode.sysinfo import SysinfoMixin
 from ebs.linuxnode.camera.mixin import CameraMixin
 
 
-class ExampleNode(CameraMixin, SysinfoMixin, BaseIoTNode):
+class ExampleNode(CameraMixin, BaseIoTNode):
     def test_camera_config(self):
         print("Camera Aliases")
         print(self.camera_aliases)

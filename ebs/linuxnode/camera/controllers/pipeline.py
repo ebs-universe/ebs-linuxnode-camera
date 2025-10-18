@@ -1,14 +1,15 @@
 
 
 
-class PipelineExecutor(object):
+class BlockingPipelineExecutor(object):
     # ----------------------------------------------------------------------
     # Generic pipeline executor
     # ----------------------------------------------------------------------
-    def _execute_pipeline(
+    def _execute_blocking_pipeline(
         self, cfg, pipeline,
         initial_context=None,
         report_progress=None,
+        report_key=None,
         prefix="_pl_",
         special_steps=None,
     ):
@@ -52,12 +53,12 @@ class PipelineExecutor(object):
 
         for idx, step in enumerate(pipeline):
             if report_progress:
-                report_progress({'max': steps, 'done': idx, 'current': step})
+                report_progress({'key': report_key, 'max': steps, 'done': idx, 'current': step})
             spec = get_step_spec(step)
             func = get_step_func(step, spec)
             context = func(spec, **context)
 
         if report_progress:
-            report_progress({'max': steps, 'done': steps, 'current': 'done'})
+            report_progress({'key': report_key, 'max': steps, 'done': steps, 'current': 'done'})
 
         return context
