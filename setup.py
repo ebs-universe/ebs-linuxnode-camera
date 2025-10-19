@@ -3,7 +3,8 @@ import setuptools
 _requires = [
     'setuptools-scm',
     'ebs-linuxnode-sysinfo>=3.1.5',
-    'linuxpy'
+    'linuxpy',
+    'opencv-python',
 ]
 
 setuptools.setup(
