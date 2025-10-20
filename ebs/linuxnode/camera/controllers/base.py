@@ -67,7 +67,6 @@ class CameraControllerBase(object):
 
     @preview_overlay_crop.setter
     def preview_overlay_crop(self, value):
-        print("Setting overlay crop to", value)
         self._preview_overlay_crop = value
 
     @property
@@ -76,7 +75,6 @@ class CameraControllerBase(object):
 
     @preview_apply_crop.setter
     def preview_apply_crop(self, value):
-        print("Setting apply crop to", value)
         self._preview_apply_crop = value
 
     @property

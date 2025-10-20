@@ -104,8 +104,7 @@ class MultiCameraManager(object):
         return True
 
     @inlineCallbacks
-    def capture_still(self, aliases=None, output_dir=None, on_progress=None):
-        results = []
+    def capture_still(self, aliases=None, output_dir=None, on_progress=None, handler=None):
         active_connect_or_acquire = set()
         waiting_cameras = []
 
@@ -124,7 +123,8 @@ class MultiCameraManager(object):
 
         if len(aliases) == 1:
             camera = self._cameras[aliases[0]]
-            yield camera.capture_still(output_dir=output_dir, on_progress=on_progress)
+            outpath = yield camera.capture_still(output_dir=output_dir, on_progress=on_progress)
+            return [outpath]
 
         def _progress_handler(progress):
             key = progress['key']
@@ -156,12 +156,15 @@ class MultiCameraManager(object):
                 result = yield camera.capture_still(
                     output_dir=output_dir, on_progress=_progress_handler
                 )
+                if handler:
+                    yield handler(result)
             except Exception as e:
                 self.log.error(f"Camera {alias} Failed: {e}")
                 result = None
 
             return result
 
+        results = []
         ds = [camera_trigger(alias) for alias in aliases]
         try:
             res = yield gatherResults(ds)

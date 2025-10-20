@@ -263,6 +263,7 @@ class CameraControllerOpenCV(BlockingPipelineExecutor, CameraControllerBase):
         return context
 
     def _pl_save(self, spec, **context):
+        # TODO Might want to move this into base?
         # TODO Might want to add jpeg / mjpeg support?
         ext = spec.format
         if ext != "png":
