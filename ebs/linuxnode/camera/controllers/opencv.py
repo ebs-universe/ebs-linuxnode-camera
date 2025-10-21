@@ -226,11 +226,26 @@ class CameraControllerOpenCV(BlockingPipelineExecutor, CameraControllerBase):
     def _pl_acquire(self, spec, **context):
         time.sleep(spec.delay)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
-        # TODO Might need to grab old frames or so here?
+
         cap = context.pop("cap")
-        r, frame = cap.read()
+
+        # Read upto 2 frames. We're asking for a buffer
+        # size of 1, so this should be enough.
+        for _ in range(2):
+            cap.grab()
+
+        # Try to read the frame multiple times in case there is a
+        # strange timing issue. Cause of issue unknown.
+        for attempt in range(3):
+            r, frame = cap.read()
+            if r:
+                break
+            time.sleep(0.1)
+
         if not r:
+            cap.release()
             raise RuntimeError(f"Camera {self._alias} Could not read frame")
+
         cap.release()
         context['ts'] = ts
         context['frame'] = frame
