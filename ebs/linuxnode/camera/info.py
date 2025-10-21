@@ -108,7 +108,8 @@ def _parse_channel_spec(spec):
 
 
 path_regex = re.compile(
-    r"^(?:pci-(?P<pci_id>[^-]+)-)?"             # optional pci
+    r"^(?:platform-[0-9a-f]+.pcie-)?"           # rpi has this prefix
+    r"(?:pci-(?P<pci_id>[^-]+)-)?"              # optional pci
     r"(?:usb[v\d]*-(?P<usb_id>[^-]+)-)?"        # optional usb (handles "usb" or "usbv2")
     r"video-index(?P<chn_id>\d+)$"              # channel is required
 )
@@ -211,18 +212,24 @@ class CameraInfo(SysInfoBase):
                         continue
                     try:
                         dev_path = dev.resolve()
-                        phy_path = _extract_v4l_path_parts(dev.name)
-                        alias = self._get_alias(phy_path["str"])
-                        if not alias:
-                            idx = str(dev_path).removeprefix("/dev/video")
-                            alias = f"cam{idx}"
-                        nodes.append({
-                            "phy_path": phy_path,
-                            "dev_path": str(dev_path),
-                            "alias": alias,
-                        })
                     except OSError:
                         continue
+                    phy_path = _extract_v4l_path_parts(dev.name)
+                    if not isinstance(phy_path, dict):
+                        print(f"Unrecognized v4l node : {dev.name}")
+                        continue
+                    
+                    alias = self._get_alias(phy_path["str"])
+                    if not alias:
+                        idx = str(dev_path).removeprefix("/dev/video")
+                        alias = f"cam{idx}"
+                    
+                    nodes.append({
+                        "phy_path": phy_path,
+                        "dev_path": str(dev_path),
+                        "alias": alias,
+                    })
+                    
                 return nodes
         return None
 

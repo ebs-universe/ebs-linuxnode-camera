@@ -16,8 +16,11 @@ class CameraControllerBase(object):
         self._frame_spec_still = None
         self._frame_spec_preview = None
 
-        self._preview_overlay_crop = config.camera_preview_show_crop
-        self._preview_apply_crop = config.camera_preview_apply_crop
+        if hasattr(config, 'camera_preview_show_crop'):
+            self._preview_overlay_crop = config.camera_preview_show_crop
+        if hasattr(config, 'camera_preview_apply_crop'):
+            self._preview_apply_crop = config.camera_preview_apply_crop
+        
         self._effective_crop_geometry = {}
         self._preview_crop_geometry = {}
 
