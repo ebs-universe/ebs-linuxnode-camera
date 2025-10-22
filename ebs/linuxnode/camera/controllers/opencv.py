@@ -209,6 +209,38 @@ class CameraControllerOpenCV(BlockingPipelineExecutor, CameraControllerBase):
         result = yield threads.deferToThread(_do_capture_locked)
         return result
 
+    def _do_capture_still(self, output_dir, report_progress):
+        """
+        Asynchronously capture a single still at max resolution.
+        Returns (filename, image_bytes).
+        """
+        cfg = dict_to_ns(self._spec["config"])
+        pipeline = cfg.pipelines.still
+
+        if pipeline[0] != 'acquire':
+            raise RuntimeError('Still capture pipelines must start with "acquire"')
+
+        # Insert camera open step
+        pipeline.insert(0, 'connect')
+
+        # Custom handling for the open_camera step
+        def _special_connect(cfg):
+            sp = copy(cfg.acquire)
+            if hasattr(sp, "type"):
+                del sp.type
+            return sp
+
+        context = self._execute_blocking_pipeline(
+            cfg=cfg,
+            pipeline=pipeline,
+            initial_context={'output_dir': output_dir},
+            report_progress=report_progress,
+            report_key=self.alias,
+            special_steps={'connect': _special_connect},
+        )
+
+        return context['out_path']
+
     def _pl_connect(self, spec, **context):
         frame_spec = self.frame_spec_still
         cap = cv2.VideoCapture(frame_spec["dev_path"], cv2.CAP_V4L2)
@@ -292,7 +324,7 @@ class CameraControllerOpenCV(BlockingPipelineExecutor, CameraControllerBase):
         else:
             params = None
 
-        output_dir = context.pop("output_dir", None)
+        output_dir = context.pop("output_dir", '')
         if output_dir:
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
@@ -303,35 +335,3 @@ class CameraControllerOpenCV(BlockingPipelineExecutor, CameraControllerBase):
         context['out_path'] = out_path
         cv2.imwrite(out_path, context['frame'], params)
         return context
-
-    def _do_capture_still(self, output_dir, report_progress):
-        """
-        Asynchronously capture a single still at max resolution.
-        Returns (filename, image_bytes).
-        """
-        cfg = dict_to_ns(self._spec["config"])
-        pipeline = cfg.pipelines.still
-
-        if pipeline[0] != 'acquire':
-            raise RuntimeError('Still capture pipelines must start with "acquire"')
-
-        # Insert camera open step
-        pipeline.insert(0, 'connect')
-
-        # Custom handling for the open_camera step
-        def _special_connect(cfg):
-            sp = copy(cfg.acquire)
-            if hasattr(sp, "type"):
-                del sp.type
-            return sp
-
-        context = self._execute_blocking_pipeline(
-            cfg=cfg,
-            pipeline=pipeline,
-            initial_context={'output_dir': output_dir},
-            report_progress=report_progress,
-            report_key=self.alias,
-            special_steps={'connect': _special_connect},
-        )
-
-        return context['out_path']

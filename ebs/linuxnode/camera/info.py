@@ -108,10 +108,10 @@ def _parse_channel_spec(spec):
 
 
 path_regex = re.compile(
-    r"^(?:platform-[0-9a-f]+.pcie-)?"           # rpi has this prefix
-    r"(?:pci-(?P<pci_id>[^-]+)-)?"              # optional pci
-    r"(?:usb[v\d]*-(?P<usb_id>[^-]+)-)?"        # optional usb (handles "usb" or "usbv2")
-    r"video-index(?P<chn_id>\d+)$"              # channel is required
+    r"^(?:platform-(?:[\w.-]*xhci-hcd\.\d+|[0-9a-f]+\.pcie)-)?"  # allow rpi4 (pcie) or rpi5 (xhci-hcd) forms
+    r"(?:pci-(?P<pci_id>[^-]+)-)?"                               # optional pci
+    r"(?:usb[v\d]*-(?P<usb_id>[^-]+)-)?"                         # optional usb or usbv2
+    r"video-index(?P<chn_id>\d+)$"                               # required video index
 )
 
 
