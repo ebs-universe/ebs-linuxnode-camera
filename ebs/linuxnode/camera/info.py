@@ -117,14 +117,14 @@ path_regex = re.compile(
 
 def _repack_v4l_path_parts(parts, compact=True):
     rv = OrderedDict()
-    if "pci" in parts.keys():
+    if "pci" in parts.keys() and parts["pci"]:
         domain, bus, slot, func = parts["pci"]
         if compact:
             rv["pci"] = f"{domain}:{bus}:{slot}.{func}"
         else:
             rv["pci"] = f"{domain:04x}:{bus:02x}:{slot:02x}.{func}"
 
-    if "usb" in parts.keys():
+    if "usb" in parts.keys() and parts["usb"]:
         usb_parts = list(map(str, parts["usb"]))
         if len(usb_parts) > 1:
             usb_str = ":".join(usb_parts[:-1]) + "." + usb_parts[-1]
